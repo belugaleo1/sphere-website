@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sphere Admin - Control Panel</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="bg-gray-900 text-white min-h-screen p-4 md:p-8">
+
+    <div class="max-w-6xl mx-auto">
+        <div class="flex justify-between items-center mb-8 border-b border-gray-700 pb-4">
+            <h1 class="text-3xl font-bold text-blue-500">Sphere <span class="text-white">Admin</span></h1>
+            <button onclick="location.reload()" class="text-gray-400 hover:text-white"><i class="fas fa-sync-alt"></i> Refresh</button>
+        </div>
+
+        <!-- DEPOSIT REQUESTS -->
+        <div class="bg-gray-800 rounded-xl overflow-hidden shadow-2xl mb-8">
+            <div class="p-4 bg-gray-700 border-b border-gray-600 flex justify-between items-center">
+                <h2 class="text-xl font-bold text-green-400"><i class="fas fa-arrow-down mr-2"></i> Deposit Requests</h2>
+                <span id="count" class="bg-blue-600 text-xs px-2 py-1 rounded-full">0</span>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left">
+                    <thead class="bg-gray-900 text-gray-400 uppercase text-xs">
+                        <tr>
+                            <th class="px-6 py-3">Email</th>
+                            <th class="px-6 py-3">Package</th>
+                            <th class="px-6 py-3">TrxID</th>
+                            <th class="px-6 py-3">Proof</th>
+                            <th class="px-6 py-3 text-right">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="req-list" class="divide-y divide-gray-700">
+                        <tr><td colspan="5" class="text-center p-8 text-gray-500">Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- WITHDRAW REQUESTS -->
+        <div class="bg-gray-800 rounded-xl overflow-hidden shadow-2xl">
+            <div class="p-4 bg-gray-700 border-b border-gray-600 flex justify-between items-center">
+                <h2 class="text-xl font-bold text-red-400"><i class="fas fa-arrow-up mr-2"></i> Withdraw Requests</h2>
+                <span id="w-count" class="bg-red-600 text-xs px-2 py-1 rounded-full">0</span>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left">
+                    <thead class="bg-gray-900 text-gray-400 uppercase text-xs">
+                        <tr>
+                            <th class="px-6 py-3">Email</th>
+                            <th class="px-6 py-3">Amount</th>
+                            <th class="px-6 py-3">Binance ID</th>
+                            <th class="px-6 py-3 text-right">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="withdraw-list" class="divide-y divide-gray-700">
+                        <tr><td colspan="4" class="text-center p-8 text-gray-500">Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getFirestore, collection, query, where, getDocs, doc, updateDoc, setDoc, increment, getDoc, arrayUnion } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyDWVUIW25hU7IuM0rHY69XchkEO-wM3_N4",
+            authDomain: "spere-2e0be.firebaseapp.com",
+            projectId: "spere-2e0be",
+            storageBucket: "spere-2e0be.firebasestorage.app",
+            messagingSenderId: "159090380576",
+            appId: "1:159090380576:web:ce2f0fff445f81ca325145",
+            measurementId: "G-KGFN47T5PJ"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        const getPkgBenefits = (price) => {
+            const p = parseInt(price);
+            if(p === 5) return { ads: 5, rate: 0.10 };
+            if(p === 10) return { ads: 10, rate: 0.15 };
+            if(p === 20) return { ads: 15, rate: 0.20 };
+            if(p === 50) return { ads: 25, rate: 0.25 };
+            if(p === 100) return { ads: 40, rate: 0.30 };
+            return { ads: 0, rate: 0 };
+        };
+
+        // --- LOAD DEPOSITS ---
+        async function loadRequests() {
+            const list = document.getElementById('req-list');
+            const q = query(collection(db, "deposits"), where("status", "==", "pending"));
+            const snapshot = await getDocs(q);
+            document.getElementById('count').innerText = snapshot.size;
+            list.innerHTML = '';
+
+            if(snapshot.empty) {
+                list.innerHTML = '<tr><td colspan="5" class="text-center p-8 text-gray-500">No pending deposits.</td></tr>';
+            } else {
+                snapshot.forEach(snap => {
+                    const data = snap.data();
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td class="px-6 py-4">${data.email}</td>
+                        <td class="px-6 py-4"><span class="bg-blue-900 text-blue-300 px-2 py-1 rounded">VIP $${data.pkgPrice}</span></td>
+                        <td class="px-6 py-4 text-yellow-500 select-all">${data.trxId}</td>
+                        <td class="px-6 py-4"><a href="${data.proofUrl}" target="_blank" class="text-blue-400 underline">Proof</a></td>
+                        <td class="px-6 py-4 text-right">
+                            <button onclick="approveDeposit('${snap.id}', '${data.uid}', ${data.pkgPrice}, '${data.email}')" class="bg-green-600 hover:bg-green-500 text-white px-4 py-1 rounded font-bold">Approve</button>
+                        </td>
+                    `;
+                    list.appendChild(row);
+                });
+            }
+        }
+
+        // --- LOAD WITHDRAWALS ---
+        async function loadWithdrawals() {
+            const list = document.getElementById('withdraw-list');
+            const q = query(collection(db, "withdrawals"), where("status", "==", "pending"));
+            const snapshot = await getDocs(q);
+            document.getElementById('w-count').innerText = snapshot.size;
+            list.innerHTML = '';
+
+            if(snapshot.empty) {
+                list.innerHTML = '<tr><td colspan="4" class="text-center p-8 text-gray-500">No pending withdrawals.</td></tr>';
+            } else {
+                snapshot.forEach(snap => {
+                    const data = snap.data();
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td class="px-6 py-4">${data.email}</td>
+                        <td class="px-6 py-4 text-green-400 font-bold">$${data.amount}</td>
+                        <td class="px-6 py-4 font-mono text-yellow-500 select-all">${data.binanceId}</td>
+                        <td class="px-6 py-4 text-right">
+                            <button onclick="approveWithdraw('${snap.id}')" class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-1 rounded font-bold">Sent</button>
+                        </td>
+                    `;
+                    list.appendChild(row);
+                });
+            }
+        }
+
+        // --- ACTIONS ---
+
+        window.approveDeposit = async (docId, userId, price, email) => {
+            if(!confirm(`Activate VIP $${price} for ${email}?`)) return;
+            const benefits = getPkgBenefits(price);
+            const commission = price * 0.20;
+            
+            // 30 Days Validity Calculation
+            const thirtyDaysInMs = 30 * 24 * 60 * 60 * 1000;
+            const expiryDate = Date.now() + thirtyDaysInMs;
+
+            try {
+                // 1. ACTIVATE PACKAGE & SET EXPIRY
+                await setDoc(doc(db, "users", userId), {
+                    email: email,
+                    activePkg: parseInt(price),
+                    ownedPlans: arrayUnion(parseInt(price)), 
+                    rate: benefits.rate,
+                    dailyLimit: increment(benefits.ads),
+                    adsLeft: increment(benefits.ads),
+                    planExpiresAt: expiryDate, // Set Expiry Date
+                    lastAdDate: new Date().toDateString(),
+                }, { merge: true });
+
+                // 2. REFERRAL COMMISSION
+                const userSnap = await getDoc(doc(db, "users", userId));
+                if(userSnap.exists() && userSnap.data().referredBy) {
+                    const referrerId = userSnap.data().referredBy;
+                    if(referrerId !== userId) {
+                        try {
+                            await updateDoc(doc(db, "users", referrerId), {
+                                balance: increment(commission)
+                            });
+                        } catch(refErr) { console.error(refErr); }
+                    }
+                }
+
+                // 3. MARK APPROVED
+                await updateDoc(doc(db, "deposits", docId), { status: "approved" });
+                alert(`✅ Activated! Valid for 30 Days.`);
+                loadRequests();
+            } catch (err) {
+                alert("Error: " + err.message);
+            }
+        };
+
+        window.approveWithdraw = async (docId) => {
+            if(!confirm("Mark this withdrawal as SENT?")) return;
+            try {
+                await updateDoc(doc(db, "withdrawals", docId), { status: "paid" });
+                alert("✅ Marked as Paid.");
+                loadWithdrawals();
+            } catch (err) {
+                alert("Error: " + err.message);
+            }
+        };
+
+        loadRequests();
+        loadWithdrawals();
+    </script>
+</body>
+</html>
