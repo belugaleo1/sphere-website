@@ -80,7 +80,6 @@
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
 
-        // Package Config (Counts same as before for balance, but UI shows Claims)
         const getPkgBenefits = (price) => {
             const p = parseInt(price);
             if(p === 5) return { ads: 5, rate: 0.10 };
@@ -157,39 +156,33 @@
             const expiryDate = Date.now() + thirtyDaysInMs;
 
             try {
-                // --- SMART RATE CALCULATION ---
                 const userRef = doc(db, "users", userId);
                 const userSnap = await getDoc(userRef);
                 
-                let currentDailyLimit = 0;
-                let currentRate = 0;
-                
-                if (userSnap.exists()) {
-                    currentDailyLimit = userSnap.data().dailyLimit || 0;
-                    currentRate = userSnap.data().rate || 0;
+                // 1. BUILD CLAIM VALUES ARRAY (For specific rewards)
+                let existingClaimValues = [];
+                if (userSnap.exists() && userSnap.data().claimValues) {
+                    existingClaimValues = userSnap.data().claimValues;
                 }
 
-                const currentDailyIncome = currentDailyLimit * currentRate;
-                const newPkgDailyIncome = newPkg.ads * newPkg.rate;
-                
-                const totalDailyIncome = currentDailyIncome + newPkgDailyIncome;
-                const totalDailyAds = currentDailyLimit + newPkg.ads;
-                
-                const newCompositeRate = totalDailyAds > 0 ? (totalDailyIncome / totalDailyAds) : 0;
+                // Append new rates to the array
+                for(let i=0; i<newPkg.ads; i++) {
+                    existingClaimValues.push(newPkg.rate);
+                }
 
-                // 1. ACTIVATE PACKAGE (USING TIMESTAMP FOR 20H RESET)
+                // 2. ACTIVATE PACKAGE
                 await setDoc(userRef, {
                     email: email,
                     activePkg: parseInt(price),
                     ownedPlans: arrayUnion(parseInt(price)),
-                    rate: newCompositeRate,
-                    dailyLimit: increment(newPkg.ads),
-                    adsLeft: increment(newPkg.ads),
+                    claimValues: existingClaimValues, // Save array
+                    dailyLimit: existingClaimValues.length, // Update limit
+                    adsLeft: increment(newPkg.ads), // Add new claims
                     planExpiresAt: expiryDate,
-                    lastResetTime: Date.now(), // Changed from lastAdDate to Timestamp
+                    lastResetTime: Date.now() // Reset timer now
                 }, { merge: true });
 
-                // 2. REFERRAL COMMISSION
+                // 3. REFERRAL COMMISSION
                 if(userSnap.exists() && userSnap.data().referredBy) {
                     const referrerId = userSnap.data().referredBy;
                     if(referrerId !== userId) {
@@ -201,9 +194,9 @@
                     }
                 }
 
-                // 3. MARK APPROVED
+                // 4. MARK APPROVED
                 await updateDoc(doc(db, "deposits", docId), { status: "approved" });
-                alert(`✅ Activated!`);
+                alert(`✅ Activated! Added ${newPkg.ads} claims of $${newPkg.rate}.`);
                 loadRequests();
             } catch (err) {
                 console.error(err);
