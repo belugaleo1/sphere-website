@@ -82,19 +82,20 @@
                 <i class="fas fa-dollar-sign absolute -right-4 -bottom-4 text-9xl text-green-500/10 z-0"></i>
             </div>
 
-            <!-- Active Plan Card (UPDATED TEXT) -->
+            <!-- Active Plan Card -->
             <div class="glass p-6 rounded-xl border-t-4 border-blue-500">
                 <p class="text-gray-400 text-sm">Active Status</p>
                 <h3 class="text-xl font-bold text-blue-400" id="pkg-name">No Active Plans</h3>
             </div>
             
+            <!-- Claims Left -->
             <div class="glass p-6 rounded-xl border-t-4 border-yellow-500 relative">
-                <p class="text-gray-400 text-sm">Ads Left Today</p>
+                <p class="text-gray-400 text-sm">Claims Left</p>
                 <h3 class="text-2xl font-bold text-yellow-400"><span id="ads-left">0</span> <span class="text-sm text-gray-500">/ <span id="daily-limit">0</span></span></h3>
                 
-                <!-- RESET TIMER (UPDATED LOGIC) -->
+                <!-- 20H TIMER -->
                 <div class="mt-2 bg-gray-800/50 rounded px-2 py-1 text-xs text-gray-400 inline-flex items-center gap-1">
-                    <i class="fas fa-clock text-yellow-500"></i> New ads in: <span id="reset-timer" class="font-mono text-white font-bold">--:--</span>
+                    <i class="fas fa-history text-yellow-500"></i> Next Claim: <span id="reset-timer" class="font-mono text-white font-bold">--:--</span>
                 </div>
             </div>
         </div>
@@ -113,21 +114,20 @@
             </div>
         </div>
 
-        <!-- Work Zone -->
+        <!-- Work Zone (CLAIM) -->
         <div id="work-zone" class="mb-10 hidden">
             <div class="glass p-6 rounded-xl bg-gray-800/50">
                 <div class="flex justify-between items-center mb-4">
-                    <h2 class="text-xl font-bold flex items-center gap-2"><i class="fas fa-briefcase text-orange-500"></i> Daily Task</h2>
+                    <h2 class="text-xl font-bold flex items-center gap-2"><i class="fas fa-coins text-yellow-500"></i> Daily Income</h2>
                     <span class="text-xs bg-green-900 text-green-300 px-2 py-1 rounded">Rate: $<span id="earn-rate">0.00</span></span>
                 </div>
                 <div class="flex items-center gap-4">
                     <div class="flex-1">
-                        <h4 class="font-bold text-white">Sponsor Ad</h4>
-                        <p class="text-xs text-gray-500">Click watch & wait 5s.</p>
+                        <h4 class="font-bold text-white">Claim Profit</h4>
+                        <p class="text-xs text-gray-500">Click below to collect earnings.</p>
                     </div>
-                    <span id="timer" class="hidden text-yellow-400 font-mono font-bold text-xl">Wait: <span id="countdown">5</span>s</span>
-                    <button id="watch-btn" onclick="watchAd()" class="bg-orange-600 hover:bg-orange-700 text-white px-6 py-2 rounded font-bold shadow-lg animate-pulse">
-                        <i class="fas fa-play mr-2"></i> Watch Ad
+                    <button id="watch-btn" onclick="claimIncome()" class="bg-yellow-600 hover:bg-yellow-700 text-white px-6 py-2 rounded-full font-bold shadow-lg animate-pulse">
+                        <i class="fas fa-hand-holding-usd mr-2"></i> CLAIM
                     </button>
                 </div>
             </div>
@@ -241,11 +241,11 @@
 
         const IMGBB_API_KEY = "acb81ea5938b150dfac714691e12bb10";
         const ADMIN_BINANCE_ID = "821397376";
-        const ADSTERRA_LINK = "https://www.effectivegatecpm.com/vxrvscq78m?key=89480c8e22aa9d7d550d6c5d2c2ef7ee";
 
         let currentUser = null;
         let currentBalance = 0;
         let selectedPkg = 0;
+        let lastResetTime = 0; // Global var for timer
 
         const packages = [
             { price: 5, ads: 5, rate: 0.10 },
@@ -255,20 +255,28 @@
             { price: 100, ads: 40, rate: 0.30 }
         ];
 
-        // --- RESET TIMER LOGIC (Shows Hour & Min until 12 AM) ---
+        // --- 20 HOUR RESET TIMER LOGIC ---
         function updateResetTimer() {
-            const now = new Date();
-            const midnight = new Date(now);
-            midnight.setHours(24, 0, 0, 0); // Set to next 12 AM
-            const diff = midnight - now;
+            if(!lastResetTime) {
+                document.getElementById('reset-timer').innerText = "Ready";
+                return;
+            }
+            
+            const now = Date.now();
+            const resetTime = lastResetTime + (20 * 60 * 60 * 1000); // 20 Hours in ms
+            const diff = resetTime - now;
+
+            if(diff <= 0) {
+                document.getElementById('reset-timer').innerText = "Now";
+                return;
+            }
 
             const h = Math.floor(diff / (1000 * 60 * 60));
             const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
             
-            document.getElementById('reset-timer').innerText = `${h} hour ${m} min`;
+            document.getElementById('reset-timer').innerText = `${h}h ${m}m`;
         }
-        setInterval(updateResetTimer, 60000); // Update every minute
-        updateResetTimer(); // Run immediately
+        setInterval(updateResetTimer, 60000);
 
         // --- REFERRAL ---
         const urlParams = new URLSearchParams(window.location.search);
@@ -282,8 +290,8 @@
                     <div class="absolute top-0 right-0 bg-blue-600 text-xs px-2 py-1 rounded-bl-lg">VIP</div>
                     <h3 class="text-3xl font-bold text-white mb-1">$${p.price}</h3>
                     <ul class="text-sm text-gray-300 mb-4 space-y-2 text-left pl-4 border-t border-gray-700 pt-4">
-                        <li><i class="fas fa-check-circle text-green-500 mr-2"></i> ${p.ads} Ads Daily</li>
-                        <li><i class="fas fa-coins text-yellow-500 mr-2"></i> $${p.rate} Per Ad</li>
+                        <li><i class="fas fa-check-circle text-green-500 mr-2"></i> ${p.ads} Claims Daily</li>
+                        <li><i class="fas fa-coins text-yellow-500 mr-2"></i> $${p.rate} Per Claim</li>
                         <li><i class="fas fa-wallet text-blue-400 mr-2"></i> Earn: <b>$${(p.ads * p.rate).toFixed(2)}</b>/Day</li>
                         <li class="text-gray-500 italic"><i class="fas fa-clock mr-2"></i> 30 Days Validity</li>
                     </ul>
@@ -307,7 +315,7 @@
                     await setDoc(userRef, {
                         name: user.displayName, email: user.email, balance: 0,
                         activePkg: null, ownedPlans: [], adsLeft: 0, dailyLimit: 0, rate: 0,
-                        lastAdDate: new Date().toDateString(),
+                        lastResetTime: Date.now() - (21 * 3600000), // Ready immediately
                         referredBy: referrer || null
                     });
                 }
@@ -341,15 +349,16 @@
             setTimeout(() => { btn.innerText = "COPY"; btn.classList.remove("copy-success"); }, 2000);
         }
 
-        // --- UPDATED LOAD USER DATA (FIXED PLAN TEXT) ---
+        // --- LOAD USER DATA ---
         function loadUserData() {
             if (!currentUser) return;
             const userRef = doc(db, "users", currentUser.uid);
             onSnapshot(userRef, (doc) => {
                 if(doc.exists()) {
                     const data = doc.data();
-                    const today = new Date().toDateString();
                     currentBalance = data.balance || 0;
+                    lastResetTime = data.lastResetTime || 0; // Update global reset time
+                    updateResetTimer(); // Trigger timer UI
 
                     // CHECK EXPIRY
                     if(data.planExpiresAt && Date.now() > data.planExpiresAt) {
@@ -359,16 +368,19 @@
                         return;
                     }
 
-                    if(data.activePkg && data.lastAdDate !== today) {
-                        updateDoc(userRef, { adsLeft: data.dailyLimit, lastAdDate: today });
+                    // 20 HOUR RESET CHECK
+                    const twentyHours = 20 * 60 * 60 * 1000;
+                    if(Date.now() > (lastResetTime + twentyHours) && data.dailyLimit > 0 && data.adsLeft < data.dailyLimit) {
+                        updateDoc(userRef, { 
+                            adsLeft: data.dailyLimit, 
+                            lastResetTime: Date.now() 
+                        });
                     }
 
                     document.getElementById('balance').innerText = currentBalance.toFixed(2);
                     
-                    // SHOW PLAN COUNT TEXT (FIXED)
                     let planText = "No Active Plans";
                     if(data.ownedPlans && Array.isArray(data.ownedPlans) && data.ownedPlans.length > 0) {
-                        // Shows: "You purchased 4 plans"
                         planText = `You purchased ${data.ownedPlans.length} plan${data.ownedPlans.length > 1 ? 's' : ''}`;
                     } else if (data.activePkg) {
                         planText = "You purchased 1 plan";
@@ -384,13 +396,15 @@
                     if (data.activePkg) {
                         workZone.classList.remove('hidden');
                         if(data.adsLeft <= 0) {
-                            watchBtn.innerText = "Done for Today";
+                            watchBtn.innerText = "Wait for Reset";
                             watchBtn.disabled = true;
-                            watchBtn.classList.add('opacity-50');
+                            watchBtn.classList.add('opacity-50', 'cursor-not-allowed');
+                            watchBtn.classList.remove('animate-pulse');
                         } else {
-                            watchBtn.innerText = "Watch Ad";
+                            watchBtn.innerText = "CLAIM";
                             watchBtn.disabled = false;
-                            watchBtn.classList.remove('opacity-50');
+                            watchBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+                            watchBtn.classList.add('animate-pulse');
                         }
                     }
                 }
@@ -452,32 +466,27 @@
 
         window.closeHistoryModal = () => document.getElementById('history-modal').classList.add('hidden');
 
-        // --- WATCH AD ---
-        window.watchAd = async () => {
+        // --- CLAIM INCOME (NO ADS, JUST CLICK) ---
+        window.claimIncome = async () => {
             const btn = document.getElementById('watch-btn');
-            const timer = document.getElementById('timer');
-            const countdown = document.getElementById('countdown');
-            window.open(ADSTERRA_LINK, '_blank');
-            btn.classList.add('hidden');
-            timer.classList.remove('hidden');
-            let timeLeft = 5;
-            const interval = setInterval(async () => {
-                timeLeft--;
-                countdown.innerText = timeLeft;
-                if (timeLeft <= 0) {
-                    clearInterval(interval);
-                    try {
-                        const userRef = doc(db, "users", currentUser.uid);
-                        await updateDoc(userRef, {
-                            balance: increment(parseFloat(document.getElementById('earn-rate').innerText)),
-                            adsLeft: increment(-1)
-                        });
-                    } catch(e) { console.error(e); }
-                    timer.classList.add('hidden');
-                    btn.classList.remove('hidden');
-                    countdown.innerText = 5;
+            btn.disabled = true;
+            btn.innerText = "Processing...";
+            
+            // Simulate loading
+            setTimeout(async () => {
+                try {
+                    const userRef = doc(db, "users", currentUser.uid);
+                    await updateDoc(userRef, {
+                        balance: increment(parseFloat(document.getElementById('earn-rate').innerText)),
+                        adsLeft: increment(-1)
+                    });
+                    // Success visual handled by snapshot listener
+                } catch(e) { 
+                    console.error(e);
+                    btn.disabled = false;
+                    btn.innerText = "Try Again";
                 }
-            }, 1000);
+            }, 1000); // 1 sec delay
         };
 
         // --- WITHDRAW ---

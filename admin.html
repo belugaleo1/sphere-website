@@ -80,6 +80,7 @@
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
 
+        // Package Config (Counts same as before for balance, but UI shows Claims)
         const getPkgBenefits = (price) => {
             const p = parseInt(price);
             if(p === 5) return { ads: 5, rate: 0.10 };
@@ -149,28 +150,46 @@
 
         window.approveDeposit = async (docId, userId, price, email) => {
             if(!confirm(`Activate VIP $${price} for ${email}?`)) return;
-            const benefits = getPkgBenefits(price);
-            const commission = price * 0.20;
             
-            // 30 Days Validity Calculation
+            const newPkg = getPkgBenefits(price);
+            const commission = price * 0.20;
             const thirtyDaysInMs = 30 * 24 * 60 * 60 * 1000;
             const expiryDate = Date.now() + thirtyDaysInMs;
 
             try {
-                // 1. ACTIVATE PACKAGE & SET EXPIRY
-                await setDoc(doc(db, "users", userId), {
+                // --- SMART RATE CALCULATION ---
+                const userRef = doc(db, "users", userId);
+                const userSnap = await getDoc(userRef);
+                
+                let currentDailyLimit = 0;
+                let currentRate = 0;
+                
+                if (userSnap.exists()) {
+                    currentDailyLimit = userSnap.data().dailyLimit || 0;
+                    currentRate = userSnap.data().rate || 0;
+                }
+
+                const currentDailyIncome = currentDailyLimit * currentRate;
+                const newPkgDailyIncome = newPkg.ads * newPkg.rate;
+                
+                const totalDailyIncome = currentDailyIncome + newPkgDailyIncome;
+                const totalDailyAds = currentDailyLimit + newPkg.ads;
+                
+                const newCompositeRate = totalDailyAds > 0 ? (totalDailyIncome / totalDailyAds) : 0;
+
+                // 1. ACTIVATE PACKAGE (USING TIMESTAMP FOR 20H RESET)
+                await setDoc(userRef, {
                     email: email,
                     activePkg: parseInt(price),
-                    ownedPlans: arrayUnion(parseInt(price)), 
-                    rate: benefits.rate,
-                    dailyLimit: increment(benefits.ads),
-                    adsLeft: increment(benefits.ads),
-                    planExpiresAt: expiryDate, // Set Expiry Date
-                    lastAdDate: new Date().toDateString(),
+                    ownedPlans: arrayUnion(parseInt(price)),
+                    rate: newCompositeRate,
+                    dailyLimit: increment(newPkg.ads),
+                    adsLeft: increment(newPkg.ads),
+                    planExpiresAt: expiryDate,
+                    lastResetTime: Date.now(), // Changed from lastAdDate to Timestamp
                 }, { merge: true });
 
                 // 2. REFERRAL COMMISSION
-                const userSnap = await getDoc(doc(db, "users", userId));
                 if(userSnap.exists() && userSnap.data().referredBy) {
                     const referrerId = userSnap.data().referredBy;
                     if(referrerId !== userId) {
@@ -184,9 +203,10 @@
 
                 // 3. MARK APPROVED
                 await updateDoc(doc(db, "deposits", docId), { status: "approved" });
-                alert(`✅ Activated! Valid for 30 Days.`);
+                alert(`✅ Activated!`);
                 loadRequests();
             } catch (err) {
+                console.error(err);
                 alert("Error: " + err.message);
             }
         };
