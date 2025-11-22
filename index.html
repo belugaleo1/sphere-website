@@ -93,7 +93,7 @@
                 <p class="text-gray-400 text-sm">Claims Left</p>
                 <h3 class="text-2xl font-bold text-yellow-400"><span id="ads-left">0</span> <span class="text-sm text-gray-500">/ <span id="daily-limit">0</span></span></h3>
                 
-                <!-- 20H TIMER -->
+                <!-- 24H TIMER -->
                 <div class="mt-2 bg-gray-800/50 rounded px-2 py-1 text-xs text-gray-400 inline-flex items-center gap-1">
                     <i class="fas fa-history text-yellow-500"></i> Next Reset: <span id="reset-timer" class="font-mono text-white font-bold">--:--</span>
                 </div>
@@ -218,15 +218,11 @@
             <div class="flex-grow overflow-y-auto space-y-6 custom-scrollbar">
                 <div>
                     <h4 class="text-sm font-bold text-gray-400 uppercase mb-2 tracking-wider">Package Purchases</h4>
-                    <div id="deposit-history-list" class="space-y-2">
-                        <div class="flex justify-center p-4"><div class="animate-spin rounded-full h-6 w-6 border-b-2 border-white"></div></div>
-                    </div>
+                    <div id="deposit-history-list" class="space-y-2"><div class="flex justify-center p-4"><div class="animate-spin rounded-full h-6 w-6 border-b-2 border-white"></div></div></div>
                 </div>
                 <div>
                     <h4 class="text-sm font-bold text-gray-400 uppercase mb-2 tracking-wider">Withdrawals</h4>
-                    <div id="withdraw-history-list" class="space-y-2">
-                        <div class="flex justify-center p-4"><div class="animate-spin rounded-full h-6 w-6 border-b-2 border-white"></div></div>
-                    </div>
+                    <div id="withdraw-history-list" class="space-y-2"><div class="flex justify-center p-4"><div class="animate-spin rounded-full h-6 w-6 border-b-2 border-white"></div></div></div>
                 </div>
             </div>
         </div>
@@ -274,10 +270,11 @@
             { price: 100, ads: 40, rate: 0.30 }
         ];
 
+        // --- 24 HOUR RESET TIMER (FIXED) ---
         function updateResetTimer() {
             if(!lastResetTime) { document.getElementById('reset-timer').innerText = "Ready"; return; }
             const now = Date.now();
-            const resetTime = lastResetTime + (20 * 60 * 60 * 1000);
+            const resetTime = lastResetTime + (24 * 60 * 60 * 1000); // Changed to 24H
             const diff = resetTime - now;
             if(diff <= 0) { document.getElementById('reset-timer').innerText = "Now"; return; }
             const h = Math.floor(diff / (1000 * 60 * 60));
@@ -286,6 +283,7 @@
         }
         setInterval(updateResetTimer, 60000);
 
+        // --- REFERRAL ---
         const urlParams = new URLSearchParams(window.location.search);
         const refCode = urlParams.get('ref');
         if(refCode) localStorage.setItem('sphere_ref', refCode);
@@ -322,7 +320,7 @@
                     await setDoc(userRef, {
                         name: user.displayName, email: user.email, balance: 0,
                         activePkg: null, ownedPlans: [], claimValues: [], adsLeft: 0, dailyLimit: 0, rate: 0,
-                        lastResetTime: Date.now() - (21 * 3600000), 
+                        lastResetTime: Date.now() - (25 * 3600000), // Reset 25h ago for instant start
                         referredBy: referrer || null
                     });
                 }
@@ -373,8 +371,9 @@
                         return;
                     }
 
-                    const twentyHours = 20 * 60 * 60 * 1000;
-                    if(Date.now() > (lastResetTime + twentyHours)) {
+                    // 24 HOUR RESET CHECK
+                    const twentyFourHours = 24 * 60 * 60 * 1000;
+                    if(Date.now() > (lastResetTime + twentyFourHours)) {
                         updateDoc(userRef, { 
                             adsLeft: data.dailyLimit, 
                             lastResetTime: Date.now() 
@@ -449,6 +448,7 @@
             }, 800);
         };
 
+        // [Keeping Modals logic as is...]
         window.closeClaimModal = () => document.getElementById('claim-modal').classList.add('hidden');
         window.closeSuccessModal = () => document.getElementById('success-modal').classList.add('hidden');
         window.closeWithdrawModal = () => document.getElementById('withdraw-modal').classList.add('hidden');
@@ -457,25 +457,19 @@
 
         window.openWithdrawModal = () => document.getElementById('withdraw-modal').classList.remove('hidden');
         
-        // --- FIXED HISTORY MODAL ---
         window.openHistoryModal = async () => {
             if (!currentUser) return alert("Please login first");
-            
             document.getElementById('history-modal').classList.remove('hidden');
             const depList = document.getElementById('deposit-history-list');
             const withList = document.getElementById('withdraw-history-list');
-            
             depList.innerHTML = '<div class="flex justify-center p-4"><div class="animate-spin rounded-full h-6 w-6 border-b-2 border-white"></div></div>';
             withList.innerHTML = '<div class="flex justify-center p-4"><div class="animate-spin rounded-full h-6 w-6 border-b-2 border-white"></div></div>';
 
             try {
-                // 1. Deposits
                 const qDep = query(collection(db, "deposits"), where("uid", "==", currentUser.uid));
                 const depSnap = await getDocs(qDep);
                 let deps = [];
                 depSnap.forEach(d => deps.push(d.data()));
-                
-                // Safe Sort
                 deps.sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0));
 
                 if (deps.length === 0) {
@@ -486,30 +480,18 @@
                         const date = d.timestamp ? new Date(d.timestamp.seconds * 1000).toLocaleDateString() : 'N/A';
                         const statusColor = d.status === 'approved' ? 'text-green-400' : 'text-yellow-500';
                         const icon = d.status === 'approved' ? 'fa-check-circle' : 'fa-clock';
-                        
                         depList.innerHTML += `
                             <div class="bg-gray-800/50 border border-gray-700 p-3 rounded-lg flex justify-between items-center">
-                                <div>
-                                    <p class="font-bold text-white">VIP $${d.pkgPrice}</p>
-                                    <p class="text-xs text-gray-500">${date}</p>
-                                </div>
-                                <div class="text-right">
-                                    <span class="${statusColor} text-sm font-bold capitalize">
-                                        <i class="fas ${icon} mr-1"></i> ${d.status}
-                                    </span>
-                                </div>
-                            </div>
-                        `;
+                                <div><p class="font-bold text-white">VIP $${d.pkgPrice}</p><p class="text-xs text-gray-500">${date}</p></div>
+                                <div class="text-right"><span class="${statusColor} text-sm font-bold capitalize"><i class="fas ${icon} mr-1"></i> ${d.status}</span></div>
+                            </div>`;
                     });
                 }
 
-                // 2. Withdrawals
                 const qWith = query(collection(db, "withdrawals"), where("uid", "==", currentUser.uid));
                 const withSnap = await getDocs(qWith);
                 let withs = [];
                 withSnap.forEach(d => withs.push(d.data()));
-                
-                // Safe Sort
                 withs.sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0));
 
                 if (withs.length === 0) {
@@ -520,23 +502,13 @@
                         const date = w.timestamp ? new Date(w.timestamp.seconds * 1000).toLocaleDateString() : 'N/A';
                         const statusColor = w.status === 'paid' ? 'text-green-400' : 'text-yellow-500';
                         const icon = w.status === 'paid' ? 'fa-check-circle' : 'fa-clock';
-                        
                         withList.innerHTML += `
                             <div class="bg-gray-800/50 border border-gray-700 p-3 rounded-lg flex justify-between items-center">
-                                <div>
-                                    <p class="font-bold text-white">Withdraw $${w.amount}</p>
-                                    <p class="text-xs text-gray-500">${date}</p>
-                                </div>
-                                <div class="text-right">
-                                    <span class="${statusColor} text-sm font-bold capitalize">
-                                        <i class="fas ${icon} mr-1"></i> ${w.status === 'pending' ? 'Pending' : 'Paid'}
-                                    </span>
-                                </div>
-                            </div>
-                        `;
+                                <div><p class="font-bold text-white">Withdraw $${w.amount}</p><p class="text-xs text-gray-500">${date}</p></div>
+                                <div class="text-right"><span class="${statusColor} text-sm font-bold capitalize"><i class="fas ${icon} mr-1"></i> ${w.status === 'pending' ? 'Pending' : 'Paid'}</span></div>
+                            </div>`;
                     });
                 }
-
             } catch (e) {
                 console.error("History Error:", e);
                 depList.innerHTML = `<p class="text-red-400 text-center text-xs">Error: ${e.message}</p>`;
