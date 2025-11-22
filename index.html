@@ -93,9 +93,9 @@
                 <p class="text-gray-400 text-sm">Claims Left</p>
                 <h3 class="text-2xl font-bold text-yellow-400"><span id="ads-left">0</span> <span class="text-sm text-gray-500">/ <span id="daily-limit">0</span></span></h3>
                 
-                <!-- 24H TIMER -->
+                <!-- MIDNIGHT RESET TIMER -->
                 <div class="mt-2 bg-gray-800/50 rounded px-2 py-1 text-xs text-gray-400 inline-flex items-center gap-1">
-                    <i class="fas fa-history text-yellow-500"></i> Next Reset: <span id="reset-timer" class="font-mono text-white font-bold">--:--</span>
+                    <i class="fas fa-history text-yellow-500"></i> Resets at 12 AM: <span id="reset-timer" class="font-mono text-white font-bold">--:--</span>
                 </div>
             </div>
         </div>
@@ -259,7 +259,6 @@
         let currentUser = null;
         let currentBalance = 0;
         let selectedPkg = 0;
-        let lastResetTime = 0;
         let currentClaimReward = 0;
 
         const packages = [
@@ -270,18 +269,22 @@
             { price: 100, ads: 40, rate: 0.30 }
         ];
 
-        // --- 24 HOUR RESET TIMER (FIXED) ---
+        // --- MIDNIGHT TIMER (FIXED) ---
         function updateResetTimer() {
-            if(!lastResetTime) { document.getElementById('reset-timer').innerText = "Ready"; return; }
-            const now = Date.now();
-            const resetTime = lastResetTime + (24 * 60 * 60 * 1000); // Changed to 24H
-            const diff = resetTime - now;
-            if(diff <= 0) { document.getElementById('reset-timer').innerText = "Now"; return; }
+            const now = new Date();
+            const midnight = new Date(now);
+            midnight.setHours(24, 0, 0, 0); // Target next 12:00 AM
+            
+            const diff = midnight - now;
+            
             const h = Math.floor(diff / (1000 * 60 * 60));
             const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-            document.getElementById('reset-timer').innerText = `${h}h ${m}m`;
+            
+            const el = document.getElementById('reset-timer');
+            if(el) el.innerText = `${h}h ${m}m`;
         }
-        setInterval(updateResetTimer, 60000);
+        setInterval(updateResetTimer, 60000); // Update every min
+        updateResetTimer();
 
         // --- REFERRAL ---
         const urlParams = new URLSearchParams(window.location.search);
@@ -320,7 +323,7 @@
                     await setDoc(userRef, {
                         name: user.displayName, email: user.email, balance: 0,
                         activePkg: null, ownedPlans: [], claimValues: [], adsLeft: 0, dailyLimit: 0, rate: 0,
-                        lastResetTime: Date.now() - (25 * 3600000), // Reset 25h ago for instant start
+                        lastAdDate: new Date().toDateString(), // Init with today
                         referredBy: referrer || null
                     });
                 }
@@ -354,6 +357,7 @@
             setTimeout(() => { btn.innerText = "COPY"; btn.classList.remove("copy-success"); }, 2000);
         }
 
+        // --- LOAD USER DATA (FIXED DATE RESET) ---
         function loadUserData() {
             if (!currentUser) return;
             const userRef = doc(db, "users", currentUser.uid);
@@ -361,9 +365,8 @@
                 if(doc.exists()) {
                     const data = doc.data();
                     currentBalance = data.balance || 0;
-                    lastResetTime = data.lastResetTime || 0; 
-                    updateResetTimer(); 
-
+                    
+                    // CHECK EXPIRY
                     if(data.planExpiresAt && Date.now() > data.planExpiresAt) {
                         document.getElementById('pkg-name').innerText = "Plan Expired";
                         document.getElementById('pkg-name').classList.replace('text-blue-400', 'text-red-500');
@@ -371,12 +374,12 @@
                         return;
                     }
 
-                    // 24 HOUR RESET CHECK
-                    const twentyFourHours = 24 * 60 * 60 * 1000;
-                    if(Date.now() > (lastResetTime + twentyFourHours)) {
+                    // DAILY RESET CHECK (Compare Date String)
+                    const today = new Date().toDateString();
+                    if(data.lastAdDate !== today && data.dailyLimit > 0) {
                         updateDoc(userRef, { 
                             adsLeft: data.dailyLimit, 
-                            lastResetTime: Date.now() 
+                            lastAdDate: today 
                         });
                     }
 
@@ -393,6 +396,7 @@
                     document.getElementById('ads-left').innerText = data.adsLeft || 0;
                     document.getElementById('daily-limit').innerText = data.dailyLimit || 0;
 
+                    // CALCULATE NEXT REWARD
                     let nextReward = 0;
                     if(data.claimValues && data.adsLeft > 0 && data.dailyLimit > 0) {
                         const index = data.dailyLimit - data.adsLeft;
@@ -410,7 +414,7 @@
                     if (data.activePkg) {
                         workZone.classList.remove('hidden');
                         if(data.adsLeft <= 0) {
-                            watchBtn.innerText = "Wait for Reset";
+                            watchBtn.innerText = "Come back tomorrow";
                             watchBtn.disabled = true;
                             watchBtn.classList.add('opacity-50', 'cursor-not-allowed');
                             watchBtn.classList.remove('animate-pulse');
@@ -448,7 +452,7 @@
             }, 800);
         };
 
-        // [Keeping Modals logic as is...]
+        // --- MODALS ---
         window.closeClaimModal = () => document.getElementById('claim-modal').classList.add('hidden');
         window.closeSuccessModal = () => document.getElementById('success-modal').classList.add('hidden');
         window.closeWithdrawModal = () => document.getElementById('withdraw-modal').classList.add('hidden');
