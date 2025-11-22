@@ -82,19 +82,19 @@
                 <i class="fas fa-dollar-sign absolute -right-4 -bottom-4 text-9xl text-green-500/10 z-0"></i>
             </div>
 
-            <!-- Active Plan Card (FIXED) -->
+            <!-- Active Plan Card (UPDATED TEXT) -->
             <div class="glass p-6 rounded-xl border-t-4 border-blue-500">
-                <p class="text-gray-400 text-sm">Active Plans</p>
-                <h3 class="text-xl font-bold text-blue-400" id="pkg-name">Free Member</h3>
+                <p class="text-gray-400 text-sm">Active Status</p>
+                <h3 class="text-xl font-bold text-blue-400" id="pkg-name">No Active Plans</h3>
             </div>
             
             <div class="glass p-6 rounded-xl border-t-4 border-yellow-500 relative">
                 <p class="text-gray-400 text-sm">Ads Left Today</p>
                 <h3 class="text-2xl font-bold text-yellow-400"><span id="ads-left">0</span> <span class="text-sm text-gray-500">/ <span id="daily-limit">0</span></span></h3>
                 
-                <!-- RESET TIMER -->
+                <!-- RESET TIMER (UPDATED LOGIC) -->
                 <div class="mt-2 bg-gray-800/50 rounded px-2 py-1 text-xs text-gray-400 inline-flex items-center gap-1">
-                    <i class="fas fa-clock"></i> Reset in: <span id="reset-timer" class="font-mono text-white">--:--</span>
+                    <i class="fas fa-clock text-yellow-500"></i> New ads in: <span id="reset-timer" class="font-mono text-white font-bold">--:--</span>
                 </div>
             </div>
         </div>
@@ -255,17 +255,17 @@
             { price: 100, ads: 40, rate: 0.30 }
         ];
 
-        // --- RESET TIMER LOGIC ---
+        // --- RESET TIMER LOGIC (Shows Hour & Min until 12 AM) ---
         function updateResetTimer() {
             const now = new Date();
             const midnight = new Date(now);
-            midnight.setHours(24, 0, 0, 0);
+            midnight.setHours(24, 0, 0, 0); // Set to next 12 AM
             const diff = midnight - now;
 
             const h = Math.floor(diff / (1000 * 60 * 60));
             const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
             
-            document.getElementById('reset-timer').innerText = `${h}h ${m}m`;
+            document.getElementById('reset-timer').innerText = `${h} hour ${m} min`;
         }
         setInterval(updateResetTimer, 60000); // Update every minute
         updateResetTimer(); // Run immediately
@@ -341,7 +341,7 @@
             setTimeout(() => { btn.innerText = "COPY"; btn.classList.remove("copy-success"); }, 2000);
         }
 
-        // --- UPDATED LOAD USER DATA (FIXED COUNT) ---
+        // --- UPDATED LOAD USER DATA (FIXED PLAN TEXT) ---
         function loadUserData() {
             if (!currentUser) return;
             const userRef = doc(db, "users", currentUser.uid);
@@ -353,7 +353,6 @@
 
                     // CHECK EXPIRY
                     if(data.planExpiresAt && Date.now() > data.planExpiresAt) {
-                        // Expired: Show user
                         document.getElementById('pkg-name').innerText = "Plan Expired";
                         document.getElementById('pkg-name').classList.replace('text-blue-400', 'text-red-500');
                         document.getElementById('work-zone').classList.add('hidden');
@@ -366,19 +365,19 @@
 
                     document.getElementById('balance').innerText = currentBalance.toFixed(2);
                     
-                    // SHOW PLAN COUNT (FIXED)
-                    let planText = "Free Member";
-                    if(data.ownedPlans && Array.isArray(data.ownedPlans)) {
-                        // Show number of plans properly
-                        planText = data.ownedPlans.length > 0 ? `${data.ownedPlans.length} Plans Active` : "Free Member";
+                    // SHOW PLAN COUNT TEXT (FIXED)
+                    let planText = "No Active Plans";
+                    if(data.ownedPlans && Array.isArray(data.ownedPlans) && data.ownedPlans.length > 0) {
+                        // Shows: "You purchased 4 plans"
+                        planText = `You purchased ${data.ownedPlans.length} plan${data.ownedPlans.length > 1 ? 's' : ''}`;
                     } else if (data.activePkg) {
-                        planText = "1 Plan Active";
+                        planText = "You purchased 1 plan";
                     }
                     document.getElementById('pkg-name').innerText = planText;
 
                     document.getElementById('ads-left').innerText = data.adsLeft || 0;
                     document.getElementById('daily-limit').innerText = data.dailyLimit || 0;
-                    document.getElementById('earn-rate').innerText = (data.rate || 0).toFixed(4); // Show extended decimals
+                    document.getElementById('earn-rate').innerText = (data.rate || 0).toFixed(4); 
 
                     const workZone = document.getElementById('work-zone');
                     const watchBtn = document.getElementById('watch-btn');
